@@ -1,0 +1,23 @@
+{
+  "name": "cbt-neon-backend",
+  "version": "1.0.0",
+  "description": "CBT Application Backend with Hono + Neon PostgreSQL",
+  "type": "module",
+  "scripts": {
+    "dev": "vercel dev",
+    "deploy": "vercel --prod"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.0.12",
+    "@neondatabase/serverless": "^0.9.0",
+    "@types/pg": "^8.20.3",
+    "dotenv": "^17.4.2",
+    "hono": "^4.4.0",
+    "pg": "^8.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.23.1",
+    "typescript": "^5.4.0"
+  }
+}
