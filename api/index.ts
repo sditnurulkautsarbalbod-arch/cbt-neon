@@ -125,6 +125,23 @@ app.post('/api/gas', async (c) => {
         }
         return c.json({ status: 'success', data: { updated: updatedCount } })
       }
+      case 'deleteUsersByClass': {
+        const kelas: string = data.kelas
+        if (!kelas) {
+          return c.json({ status: 'error', message: 'kelas required' }, 400)
+        }
+        const deleted = await sql`DELETE FROM users WHERE kelas = ${kelas} AND role != 'admin'`
+        return c.json({ status: 'success', data: { deleted: deleted.length } })
+      }
+      case 'updateUsersClassByClass': {
+        const fromKelas: string = data.fromKelas
+        const toKelas: string = data.toKelas
+        if (!fromKelas || !toKelas) {
+          return c.json({ status: 'error', message: 'fromKelas and toKelas required' }, 400)
+        }
+        const updated = await sql`UPDATE users SET kelas = ${toKelas} WHERE kelas = ${fromKelas} AND role != 'admin'`
+        return c.json({ status: 'success', data: { updated: updated.length } })
+      }
 
       default:
         return c.json({ status: 'error', message: `Unknown action: ${action}` }, 400)

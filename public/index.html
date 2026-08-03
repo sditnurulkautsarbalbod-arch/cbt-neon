@@ -3253,143 +3253,220 @@
                 });
             },
 
-            // ========== BULK SELECTION ==========
-            selectedUsers: new Set(),
 
-            toggleSelectAll(checkbox) {
-                const checkboxes = document.querySelectorAll('.user-checkbox');
-                checkboxes.forEach(cb => {
-                    cb.checked = checkbox.checked;
-                    const username = cb.dataset.username;
-                    if (checkbox.checked) {
-                        this.selectedUsers.add(username);
-                    } else {
-                        this.selectedUsers.delete(username);
-                    }
-                });
-                this.updateBulkActionBar();
-                this.renderUserTable();
-            },
+            // ========== MASSAL CLASS MANAGEMENT ==========
+            _massalSelectedKelas: null,
 
-            toggleUserSelection(username, checkbox) {
-                if (checkbox.checked) {
-                    this.selectedUsers.add(username);
-                } else {
-                    this.selectedUsers.delete(username);
-                }
-                // Update select all checkbox state
-                const allCheckboxes = document.querySelectorAll('.user-checkbox');
-                const selectAll = document.getElementById('selectAllUsers');
-                if (selectAll) {
-                    selectAll.checked = allCheckboxes.length > 0 && allCheckboxes.length === this.selectedUsers.size;
-                }
-                this.updateBulkActionBar();
-                this.renderUserTable();
-            },
+            onMassalClassChange() {
+                const kelas = document.getElementById('massalClassSelect')?.value;
+                const userInfo = document.getElementById('massalUserInfo');
+                const actions = document.getElementById('massalActions');
+                this.hideMassalMoveClass();
+                this.hideMassalMoveTingkatan();
 
-            clearSelection() {
-                this.selectedUsers.clear();
-                const selectAll = document.getElementById('selectAllUsers');
-                if (selectAll) selectAll.checked = false;
-                this.updateBulkActionBar();
-                this.renderUserTable();
-            },
-
-            updateBulkActionBar() {
-                const bar = document.getElementById('bulkActionBar');
-                const count = document.getElementById('selectedCount');
-                if (bar && count) {
-                    if (this.selectedUsers.size > 0) {
-                        bar.classList.remove('hidden');
-                        count.textContent = `${this.selectedUsers.size} dipilih`;
-                    } else {
-                        bar.classList.add('hidden');
-                    }
-                }
-            },
-
-            // ========== BULK DELETE ==========
-            async bulkDeleteUsers() {
-                const usernames = Array.from(this.selectedUsers);
-                if (usernames.length === 0) return UI.showNotification('Tidak ada pengguna yang dipilih', 'warning');
-
-                const adminCount = usernames.filter(u => {
-                    const user = AppState.users.find(x => x.username === u);
-                    return user && user.role === 'admin';
-                }).length;
-
-                let message = `Hapus ${usernames.length} pengguna yang dipilih?`;
-                if (adminCount > 0) {
-                    message += `\n\n⚠️ Termasuk ${adminCount} admin!`;
+                if (!kelas) {
+                    userInfo?.classList.add('hidden');
+                    actions?.classList.add('hidden');
+                    this._massalSelectedKelas = null;
+                    return;
                 }
 
-                UI.showConfirmModal('Konfirmasi Hapus Massal', message, async () => {
+                this._massalSelectedKelas = kelas;
+                const users = AppState.users.filter(u => u.kelas === kelas && u.role !== 'admin');
+                const guruCount = users.filter(u => u.role === 'guru').length;
+                const siswaCount = users.filter(u => u.role === 'siswa').length;
+
+                document.getElementById('massalGuruCount').textContent = `${guruCount} Guru`;
+                document.getElementById('massalSiswaCount').textContent = `${siswaCount} Siswa`;
+                userInfo?.classList.remove('hidden');
+                actions?.classList.remove('hidden');
+            },
+
+            async massalDeleteClass() {
+                const kelas = this._massalSelectedKelas;
+                if (!kelas) return UI.showNotification('Pilih kelas terlebih dahulu', 'warning');
+
+                const users = AppState.users.filter(u => u.kelas === kelas && u.role !== 'admin');
+                if (users.length === 0) return UI.showNotification('Tidak ada pengguna (non-admin) di kelas ini', 'warning');
+
+                const guruCount = users.filter(u => u.role === 'guru').length;
+                const siswaCount = users.filter(u => u.role === 'siswa').length;
+
+                let detail = `Hapus SEMUA pengguna di kelas ${kelas}?`;
+                detail += `\n\nTotal: ${users.length} pengguna`;
+                if (guruCount > 0) detail += `\n• ${guruCount} Guru`;
+                if (siswaCount > 0) detail += `\n• ${siswaCount} Siswa`;
+                detail += `\n\n⚠️ Tindakan ini tidak dapat dibatalkan!`;
+
+                UI.showConfirmModal('Konfirmasi Hapus Massal', detail, async () => {
                     try {
-                        UI.showNotification(`Menghapus ${usernames.length} pengguna...`, 'info');
-                        
+                        UI.showNotification(`Menghapus ${users.length} pengguna dari kelas ${kelas}...`, 'info');
                         const result = await callGoogleScript('POST', {
-                            action: 'deleteUsersBulk',
-                            data: { usernames }
+                            action: 'deleteUsersByClass',
+                            data: { kelas }
                         });
-
                         if (result.status === 'success') {
-                            // Remove from local state
-                            AppState.users = AppState.users.filter(u => !usernames.includes(u.username));
-                            this.selectedUsers.clear();
-                            UI.showNotification(`Berhasil menghapus ${result.data.deleted} pengguna`, 'success');
+                            AppState.users = AppState.users.filter(u => u.kelas !== kelas || u.role === 'admin');
+                            this.onMassalClassChange();
+                            UI.showNotification(`Berhasil menghapus ${result.data.deleted} pengguna dari kelas ${kelas}`, 'success');
                             UI.showUserManagement();
                         } else {
-                            UI.showNotification('Gagal menghapus pengguna: ' + (result.message || 'Unknown error'), 'error');
+                            UI.showNotification('Gagal menghapus: ' + (result.message || 'Unknown error'), 'error');
                         }
                     } catch (error) {
-                        console.error('Bulk delete error:', error);
+                        console.error('Massal delete error:', error);
                         UI.showNotification('Gagal menghapus pengguna', 'error');
                     }
                 });
             },
 
-            // ========== BULK CHANGE CLASS ==========
-            async bulkChangeClass() {
-                const usernames = Array.from(this.selectedUsers);
-                const newKelas = document.getElementById('bulkClassSelect')?.value;
-                
-                if (usernames.length === 0) return UI.showNotification('Tidak ada pengguna yang dipilih', 'warning');
-                if (!newKelas) return UI.showNotification('Pilih kelas tujuan terlebih dahulu', 'warning');
+            showMassalMoveClass() {
+                const kelas = this._massalSelectedKelas;
+                if (!kelas) return UI.showNotification('Pilih kelas terlebih dahulu', 'warning');
+                document.getElementById('massalFromKelas').textContent = kelas;
+                document.getElementById('massalToKelas').value = '';
+                document.getElementById('massalMoveClassPanel')?.classList.remove('hidden');
+                document.getElementById('massalMoveTingkatanPanel')?.classList.add('hidden');
+            },
 
-                const selectedUsers = AppState.users.filter(u => usernames.includes(u.username));
-                const guruCount = selectedUsers.filter(u => u.role === 'guru').length;
-                const siswaCount = selectedUsers.filter(u => u.role === 'siswa').length;
+            hideMassalMoveClass() {
+                document.getElementById('massalMoveClassPanel')?.classList.add('hidden');
+            },
 
-                let detail = `${usernames.length} pengguna akan dipindah ke kelas ${newKelas}`;
+            async executeMassalMoveClass() {
+                const fromKelas = this._massalSelectedKelas;
+                const toKelas = document.getElementById('massalToKelas')?.value;
+                if (!fromKelas) return UI.showNotification('Pilih kelas asal', 'warning');
+                if (!toKelas) return UI.showNotification('Pilih kelas tujuan', 'warning');
+                if (fromKelas === toKelas) return UI.showNotification('Kelas asal dan tujuan sama', 'warning');
+
+                const users = AppState.users.filter(u => u.kelas === fromKelas && u.role !== 'admin');
+                const guruCount = users.filter(u => u.role === 'guru').length;
+                const siswaCount = users.filter(u => u.role === 'siswa').length;
+
+                let detail = `Pindahkan ${users.length} pengguna dari kelas ${fromKelas} ke ${toKelas}?`;
                 if (guruCount > 0) detail += `\n• ${guruCount} Guru`;
                 if (siswaCount > 0) detail += `\n• ${siswaCount} Siswa`;
 
                 UI.showConfirmModal('Konfirmasi Pindah Kelas', detail, async () => {
                     try {
-                        UI.showNotification(`Memindahkan ${usernames.length} pengguna ke kelas ${newKelas}...`, 'info');
-                        
+                        UI.showNotification(`Memindahkan ${users.length} pengguna dari ${fromKelas} ke ${toKelas}...`, 'info');
                         const result = await callGoogleScript('POST', {
-                            action: 'updateUsersClassBulk',
-                            data: { usernames, kelas: newKelas }
+                            action: 'updateUsersClassByClass',
+                            data: { fromKelas, toKelas }
                         });
-
                         if (result.status === 'success') {
-                            // Update local state
                             AppState.users = AppState.users.map(u => {
-                                if (usernames.includes(u.username)) {
-                                    return { ...u, kelas: newKelas };
-                                }
+                                if (u.kelas === fromKelas && u.role !== 'admin') return { ...u, kelas: toKelas };
                                 return u;
                             });
-                            this.selectedUsers.clear();
-                            document.getElementById('bulkClassSelect').value = '';
-                            UI.showNotification(`Berhasil memindahkan ${result.data.updated} pengguna ke kelas ${newKelas}`, 'success');
+                            this.hideMassalMoveClass();
+                            this.onMassalClassChange();
+                            UI.showNotification(`Berhasil memindahkan ${result.data.updated} pengguna ke kelas ${toKelas}`, 'success');
                             UI.showUserManagement();
                         } else {
-                            UI.showNotification('Gagal memindahkan pengguna: ' + (result.message || 'Unknown error'), 'error');
+                            UI.showNotification('Gagal memindahkan: ' + (result.message || 'Unknown error'), 'error');
                         }
                     } catch (error) {
-                        console.error('Bulk change class error:', error);
+                        console.error('Massal move class error:', error);
+                        UI.showNotification('Gagal memindahkan pengguna', 'error');
+                    }
+                });
+            },
+
+            showMassalMoveTingkatan() {
+                const kelas = this._massalSelectedKelas;
+                if (!kelas) return UI.showNotification('Pilih kelas terlebih dahulu', 'warning');
+
+                // Extract grade number and letter (e.g., "5A" → grade=5, letter="A")
+                const match = kelas.match(/^(\d+)([A-Za-z]*)$/);
+                if (!match) {
+                    UI.showNotification('Format kelas tidak valid untuk pindah tingkatan', 'warning');
+                    return;
+                }
+
+                const currentGrade = parseInt(match[1]);
+                const letter = match[2] || '';
+                document.getElementById('massalFromTingkatan').textContent = `Kelas ${currentGrade}`;
+
+                // Auto-select next grade
+                const nextGrade = currentGrade + 1;
+                const toTingkatan = document.getElementById('massalToTingkatan');
+                if (toTingkatan) {
+                    toTingkatan.value = nextGrade <= 6 ? String(nextGrade) : '';
+                    // Update preview
+                    this.updateTingkatanPreview();
+                }
+
+                document.getElementById('massalMoveTingkatanPanel')?.classList.remove('hidden');
+                document.getElementById('massalMoveClassPanel')?.classList.add('hidden');
+            },
+
+            hideMassalMoveTingkatan() {
+                document.getElementById('massalMoveTingkatanPanel')?.classList.add('hidden');
+            },
+
+            updateTingkatanPreview() {
+                const kelas = this._massalSelectedKelas;
+                const toGrade = document.getElementById('massalToTingkatan')?.value;
+                const preview = document.getElementById('massalTingkatanPreview');
+                if (!kelas || !toGrade || !preview) { if (preview) preview.textContent = ''; return; }
+
+                const match = kelas.match(/^(\d+)([A-Za-z]*)$/);
+                if (!match) return;
+                const letter = match[2] || '';
+                const targetClass = toGrade + letter;
+
+                const users = AppState.users.filter(u => u.kelas === kelas && u.role !== 'admin');
+                preview.innerHTML = `<i class="fas fa-info-circle mr-1 text-purple-500"></i>${users.length} pengguna di <strong>${kelas}</strong> akan dipindah ke <strong>${targetClass}</strong>`;
+            },
+
+            async executeMassalMoveTingkatan() {
+                const kelas = this._massalSelectedKelas;
+                const toGrade = document.getElementById('massalToTingkatan')?.value;
+                if (!kelas) return UI.showNotification('Pilih kelas asal', 'warning');
+                if (!toGrade) return UI.showNotification('Pilih tingkatan tujuan', 'warning');
+
+                const match = kelas.match(/^(\d+)([A-Za-z]*)$/);
+                if (!match) return UI.showNotification('Format kelas tidak valid', 'warning');
+                const letter = match[2] || '';
+                const toKelas = toGrade + letter;
+                const fromGrade = parseInt(match[1]);
+
+                if (fromGrade === parseInt(toGrade)) return UI.showNotification('Tingkatan asal dan tujuan sama', 'warning');
+
+                const users = AppState.users.filter(u => u.kelas === kelas && u.role !== 'admin');
+                const guruCount = users.filter(u => u.role === 'guru').length;
+                const siswaCount = users.filter(u => u.role === 'siswa').length;
+
+                let detail = `Pindahkan ${users.length} pengguna dari kelas ${kelas} (tingkatan ${fromGrade}) ke tingkatan ${toGrade}?`;
+                detail += `\n\nSemua siswa & guru akan dipindah ke kelas ${toKelas}`;
+                if (guruCount > 0) detail += `\n• ${guruCount} Guru`;
+                if (siswaCount > 0) detail += `\n• ${siswaCount} Siswa`;
+
+                UI.showConfirmModal('Konfirmasi Pindah Tingkatan', detail, async () => {
+                    try {
+                        UI.showNotification(`Memindahkan ${users.length} pengguna ke tingkatan ${toGrade}...`, 'info');
+                        const result = await callGoogleScript('POST', {
+                            action: 'updateUsersClassByClass',
+                            data: { fromKelas: kelas, toKelas }
+                        });
+                        if (result.status === 'success') {
+                            AppState.users = AppState.users.map(u => {
+                                if (u.kelas === kelas && u.role !== 'admin') return { ...u, kelas: toKelas };
+                                return u;
+                            });
+                            this.hideMassalMoveTingkatan();
+                            this._massalSelectedKelas = toKelas;
+                            document.getElementById('massalClassSelect').value = toKelas;
+                            this.onMassalClassChange();
+                            UI.showNotification(`Berhasil memindahkan ${result.data.updated} pengguna ke kelas ${toKelas}`, 'success');
+                            UI.showUserManagement();
+                        } else {
+                            UI.showNotification('Gagal memindahkan: ' + (result.message || 'Unknown error'), 'error');
+                        }
+                    } catch (error) {
+                        console.error('Massal move tingkatan error:', error);
                         UI.showNotification('Gagal memindahkan pengguna', 'error');
                     }
                 });
@@ -6599,20 +6676,73 @@
                             </div>
                         </div>
 
-                        <!-- Bulk Action Bar -->
-                        <div id="bulkActionBar" class="hidden bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4 flex items-center justify-between">
-                            <div class="flex items-center gap-4">
-                                <span id="selectedCount" class="text-sm font-medium text-blue-800">0 dipilih</span>
-                                <button onclick="Management.bulkDeleteUsers()" class="bg-red-600 text-white px-3 py-1.5 rounded-lg hover:bg-red-700 text-sm"><i class="fas fa-trash mr-1"></i>Hapus Terpilih</button>
-                                <div class="flex items-center gap-2">
-                                    <select id="bulkClassSelect" class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                                        <option value="">Pilih Kelas</option>
+                        <!-- Manajemen Massal -->
+                        <div class="bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-200 rounded-lg p-5 mb-6">
+                            <h3 class="text-lg font-bold text-indigo-900 mb-4"><i class="fas fa-layer-group mr-2"></i>Manajemen Massal</h3>
+                            <div class="flex flex-wrap items-end gap-4">
+                                <div class="flex-1 min-w-[200px]">
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Pilih Kelas</label>
+                                    <select id="massalClassSelect" onchange="Management.onMassalClassChange()" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                        <option value="">-- Pilih Kelas --</option>
                                         ${AppState.classes.map(c => `<option value="${c.nama}">${c.nama}</option>`).join('')}
                                     </select>
-                                    <button onclick="Management.bulkChangeClass()" class="bg-orange-600 text-white px-3 py-1.5 rounded-lg hover:bg-orange-700 text-sm"><i class="fas fa-users mr-1"></i>Pindah Kelas</button>
+                                </div>
+                                <div id="massalUserInfo" class="hidden flex-1 min-w-[200px]">
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Info Pengguna</label>
+                                    <div class="flex items-center gap-3 text-sm py-2">
+                                        <span id="massalGuruCount" class="px-2 py-1 bg-green-100 text-green-800 rounded-full font-semibold">0 Guru</span>
+                                        <span id="massalSiswaCount" class="px-2 py-1 bg-blue-100 text-blue-800 rounded-full font-semibold">0 Siswa</span>
+                                    </div>
+                                </div>
+                                <div id="massalActions" class="hidden flex flex-wrap gap-2">
+                                    <button onclick="Management.massalDeleteClass()" class="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 text-sm font-semibold transition"><i class="fas fa-trash mr-1"></i>Hapus Semua</button>
+                                    <button onclick="Management.showMassalMoveClass()" class="bg-orange-500 text-white px-4 py-2 rounded-lg hover:bg-orange-600 text-sm font-semibold transition"><i class="fas fa-exchange-alt mr-1"></i>Pindah Kelas</button>
+                                    <button onclick="Management.showMassalMoveTingkatan()" class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 text-sm font-semibold transition"><i class="fas fa-arrow-up mr-1"></i>Pindah Tingkatan</button>
                                 </div>
                             </div>
-                            <button onclick="Management.clearSelection()" class="text-gray-600 hover:text-gray-800 text-sm"><i class="fas fa-times mr-1"></i>Batal Pilih</button>
+                            <!-- Move Class Sub-panel -->
+                            <div id="massalMoveClassPanel" class="hidden mt-4 p-4 bg-white rounded-lg border border-orange-200">
+                                <h4 class="font-semibold text-orange-800 mb-3"><i class="fas fa-exchange-alt mr-1"></i>Pindah Kelas</h4>
+                                <div class="flex items-end gap-3">
+                                    <div class="flex-1">
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">Kelas Asal</label>
+                                        <div id="massalFromKelas" class="px-3 py-2 bg-gray-100 rounded-md text-sm font-semibold text-gray-700">-</div>
+                                    </div>
+                                    <div class="text-center text-gray-400 pb-2"><i class="fas fa-arrow-right text-lg"></i></div>
+                                    <div class="flex-1">
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">Kelas Tujuan</label>
+                                        <select id="massalToKelas" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-orange-500">
+                                            <option value="">Pilih Tujuan</option>
+                                            ${AppState.classes.map(c => `<option value="${c.nama}">${c.nama}</option>`).join('')}
+                                        </select>
+                                    </div>
+                                    <button onclick="Management.executeMassalMoveClass()" class="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 text-sm font-semibold"><i class="fas fa-check mr-1"></i>Pindahkan</button>
+                                    <button onclick="Management.hideMassalMoveClass()" class="text-gray-500 hover:text-gray-700 px-2"><i class="fas fa-times"></i></button>
+                                </div>
+                            </div>
+                            <!-- Move Tingkatan Sub-panel -->
+                            <div id="massalMoveTingkatanPanel" class="hidden mt-4 p-4 bg-white rounded-lg border border-purple-200">
+                                <h4 class="font-semibold text-purple-800 mb-3"><i class="fas fa-arrow-up mr-1"></i>Pindah Tingkatan</h4>
+                                <div class="flex items-end gap-3">
+                                    <div class="flex-1">
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">Tingkatan Asal</label>
+                                        <div id="massalFromTingkatan" class="px-3 py-2 bg-gray-100 rounded-md text-sm font-semibold text-gray-700">-</div>
+                                    </div>
+                                    <div class="text-center text-gray-400 pb-2"><i class="fas fa-arrow-right text-lg"></i></div>
+                                    <div class="flex-1">
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">Tingkatan Tujuan</label>
+                                        <select id="massalToTingkatan" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-purple-500">
+                                            <option value="">Pilih Tujuan</option>
+                                            <option value="4">Kelas 4</option>
+                                            <option value="5">Kelas 5</option>
+                                            <option value="6">Kelas 6</option>
+                                        </select>
+                                    </div>
+                                    <button onclick="Management.executeMassalMoveTingkatan()" class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 text-sm font-semibold"><i class="fas fa-check mr-1"></i>Pindahkan</button>
+                                    <button onclick="Management.hideMassalMoveTingkatan()" class="text-gray-500 hover:text-gray-700 px-2"><i class="fas fa-times"></i></button>
+                                </div>
+                                <p id="massalTingkatanPreview" class="text-sm text-gray-500 mt-2"></p>
+                            </div>
                         </div>
 
                         <div class="bg-white rounded-lg shadow overflow-hidden">
@@ -6620,9 +6750,6 @@
                                 <table id="userManagementTable" class="min-w-full divide-y divide-gray-200">
                                     <thead class="bg-gray-50">
                                         <tr>
-                                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                <input type="checkbox" id="selectAllUsers" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" onchange="Management.toggleSelectAll(this)">
-                                            </th>
                                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">No.</th>
                                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Username</th>
                                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Password</th>
@@ -6647,6 +6774,9 @@
                     document.getElementById('filterUserClass').value = '';
                     this.renderUserTable();
                 });
+
+                // Tingkatan preview update
+                document.getElementById('massalToTingkatan')?.addEventListener('change', () => this.updateTingkatanPreview());
 
                 this.renderUserTable();
             },
@@ -6681,10 +6811,7 @@
 
                 const tableBody = document.querySelector('#userManagementTable tbody');
                 tableBody.innerHTML = filteredUsers.map((user, index) => `
-                    <tr class="${Management.selectedUsers.has(user.username) ? 'bg-blue-50' : ''}">
-                        <td class="px-4 py-4 whitespace-nowrap">
-                            <input type="checkbox" class="user-checkbox rounded border-gray-300 text-blue-600 focus:ring-blue-500" data-username="${user.username}" ${Management.selectedUsers.has(user.username) ? 'checked' : ''} onchange="Management.toggleUserSelection('${user.username}', this)">
-                        </td>
+                    <tr class="hover:bg-gray-50 transition">
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${index + 1}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${user.username}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">••••••••</td>
