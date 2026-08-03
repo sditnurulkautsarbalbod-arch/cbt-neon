@@ -985,7 +985,7 @@
                                     return addGradeResult;
                                 }
 
-                                const fallbackGradeResult = await callGoogleScript('POST', { action: 'addGrades', data: data });
+                                const fallbackGradeResult = await callGoogleScript('POST', { action: 'addGrades', data: [data] });
                                 if (fallbackGradeResult && fallbackGradeResult.status === 'success') {
                                     return fallbackGradeResult;
                                 }
@@ -1794,7 +1794,7 @@
                             if (!result || result.status !== 'success') {
                                 const fallbackResult = await callGoogleScript('POST', {
                                     action: 'addGrades',
-                                    data: newGrade
+                                    data: [newGrade]
                                 });
                                 if (fallbackResult && fallbackResult.status === 'success') {
                                     result = fallbackResult;
