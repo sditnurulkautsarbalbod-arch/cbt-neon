@@ -83,16 +83,16 @@ app.post('/api/gas', async (c) => {
 
       // ========== CLEANUP (admin) ==========
       case 'deleteResultsByKodeSoal': {
-        const result = await sql`DELETE FROM results WHERE kode_soal = ${data.kodeSoal}`
-        return c.json({ status: 'success', deleted: result.count })
+        const deleted = await sql`DELETE FROM results WHERE kode_soal = ${data.kodeSoal}`
+        return c.json({ status: 'success', deleted: deleted.length })
       }
       case 'deleteGradesByKodeSoal': {
-        const result = await sql`DELETE FROM grades WHERE kode_soal = ${data.kodeSoal}`
-        return c.json({ status: 'success', deleted: result.count })
+        const deleted = await sql`DELETE FROM grades WHERE kode_soal = ${data.kodeSoal}`
+        return c.json({ status: 'success', deleted: deleted.length })
       }
       case 'deleteUsersByPrefix': {
-        const result = await sql`DELETE FROM users WHERE username LIKE ${data.prefix + '%'}`
-        return c.json({ status: 'success', deleted: result.count })
+        const deleted = await sql`DELETE FROM users WHERE username LIKE ${data.prefix + '%'}`
+        return c.json({ status: 'success', deleted: deleted.length })
       }
 
       default:
