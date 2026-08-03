@@ -2773,7 +2773,7 @@
 
         async function callGoogleScript(method = 'GET', params = {}) {
             if (method === 'GET') {
-                const url = new URL(`${API_BASE}/gas`);
+                const url = new URL(`${API_BASE}/gas`, window.location.origin);
                 Object.keys(params).forEach(key => {
                     if (params[key] || params[key] === 0) {
                         url.searchParams.append(key, params[key]);
