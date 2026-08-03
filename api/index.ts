@@ -81,6 +81,20 @@ app.post('/api/gas', async (c) => {
       case 'updateSubject': return handleUpdateSubject(c, data)
       case 'deleteSubject': return handleDeleteSubject(c, data)
 
+      // ========== CLEANUP (admin) ==========
+      case 'deleteResultsByKodeSoal': {
+        const result = await sql`DELETE FROM results WHERE kode_soal = ${data.kodeSoal}`
+        return c.json({ status: 'success', deleted: result.count })
+      }
+      case 'deleteGradesByKodeSoal': {
+        const result = await sql`DELETE FROM grades WHERE kode_soal = ${data.kodeSoal}`
+        return c.json({ status: 'success', deleted: result.count })
+      }
+      case 'deleteUsersByPrefix': {
+        const result = await sql`DELETE FROM users WHERE username LIKE ${data.prefix + '%'}`
+        return c.json({ status: 'success', deleted: result.count })
+      }
+
       default:
         return c.json({ status: 'error', message: `Unknown action: ${action}` }, 400)
     }
