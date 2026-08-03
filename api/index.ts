@@ -49,6 +49,7 @@ app.post('/api/gas', async (c) => {
     switch (action) {
       // ========== USERS ==========
       case 'addUser': return handleAddUser(c, data)
+      case 'addUsersBulk': return handleAddUsersBulk(c, data)
       case 'updateUser': return handleUpdateUser(c, data)
       case 'deleteUser': return handleDeleteUser(c, data)
 
@@ -93,6 +94,36 @@ app.post('/api/gas', async (c) => {
       case 'deleteUsersByPrefix': {
         const deleted = await sql`DELETE FROM users WHERE username LIKE ${data.prefix + '%'}`
         return c.json({ status: 'success', deleted: deleted.length })
+      }
+
+      // ========== BULK OPERATIONS ==========
+      case 'deleteUsersBulk': {
+        const usernames: string[] = data.usernames
+        if (!usernames || !Array.isArray(usernames) || usernames.length === 0) {
+          return c.json({ status: 'error', message: 'usernames array required' }, 400)
+        }
+        let deletedCount = 0
+        for (const username of usernames) {
+          const result = await sql`DELETE FROM users WHERE username = ${username}`
+          deletedCount += result.length
+        }
+        return c.json({ status: 'success', data: { deleted: deletedCount } })
+      }
+      case 'updateUsersClassBulk': {
+        const usernames: string[] = data.usernames
+        const newKelas: string = data.kelas
+        if (!usernames || !Array.isArray(usernames) || usernames.length === 0) {
+          return c.json({ status: 'error', message: 'usernames array required' }, 400)
+        }
+        if (!newKelas) {
+          return c.json({ status: 'error', message: 'kelas required' }, 400)
+        }
+        let updatedCount = 0
+        for (const username of usernames) {
+          const result = await sql`UPDATE users SET kelas = ${newKelas} WHERE username = ${username}`
+          updatedCount += result.length
+        }
+        return c.json({ status: 'success', data: { updated: updatedCount } })
       }
 
       default:
@@ -246,6 +277,41 @@ async function handleAddUser(c: any, data: any) {
     RETURNING *
   `
   return c.json({ status: 'success', data: result[0] })
+}
+
+async function handleAddUsersBulk(c: any, data: any) {
+  const users = Array.isArray(data) ? data : data.users
+  if (!Array.isArray(users) || users.length === 0) {
+    return c.json({ status: 'error', message: 'Data harus berupa array users' }, 400)
+  }
+
+  const results: any[] = []
+  const errors: any[] = []
+
+  for (let i = 0; i < users.length; i++) {
+    const u = users[i]
+    try {
+      if (!u.username || !u.password || !u.nama || !u.kelas) {
+        errors.push({ index: i + 1, username: u.username || '?', error: 'Field wajib kurang: username, password, nama, kelas' })
+        continue
+      }
+      const result = await sql`
+        INSERT INTO users (username, password, nama, kelas, role)
+        VALUES (${u.username}, ${u.password}, ${u.nama}, ${u.kelas}, ${u.role || 'siswa'})
+        RETURNING *
+      `
+      results.push(result[0])
+    } catch (e: any) {
+      errors.push({ index: i + 1, username: u.username || '?', error: e.message })
+    }
+  }
+
+  return c.json({
+    status: errors.length === 0 ? 'success' : 'partial',
+    data: { inserted: results.length, failed: errors.length },
+    errors: errors.length > 0 ? errors : undefined,
+    message: `${results.length} user berhasil ditambahkan${errors.length > 0 ? `, ${errors.length} gagal` : ''}`
+  })
 }
 
 async function handleUpdateUser(c: any, data: any) {
